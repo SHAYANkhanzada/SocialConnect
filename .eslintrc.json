@@ -1,0 +1,8 @@
+{
+  "root": true,
+  "extends": ["@react-native-community", "plugin:prettier/recommended"],
+  "rules": {
+    "prettier/prettier": ["error"],
+    "react/react-in-jsx-scope": "off"
+  }
+}
