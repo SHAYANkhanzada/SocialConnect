@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { Text, Switch } from 'react-native-paper';
+import { Text, Switch, useTheme } from 'react-native-paper';
 import { signOut, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../../services/firebase';
 import { responsiveHeight, responsiveWidth, responsiveFontSize } from 'react-native-responsive-dimensions';
+import { useAppTheme } from '../../context/ThemeContext';
+import { UserService } from '../../services/UserService';
 
 const SettingsScreen = () => {
-    const [isDarkMode, setIsDarkMode] = useState(false);
+    const theme = useTheme();
+    const { isDarkMode, toggleTheme } = useAppTheme();
     const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
     const user = auth.currentUser;
 
     const handleLogout = async () => {
@@ -35,33 +39,58 @@ const SettingsScreen = () => {
         Alert.alert('Privacy Settings', 'Privacy settings configuration is coming soon.');
     };
 
+    const handleSyncProfile = async () => {
+        if (!user) return;
+        setIsSyncing(true);
+        try {
+            await UserService.upsertUserProfile(user.uid, {
+                displayName: user.displayName || '',
+                email: user.email || '',
+                photoURL: user.photoURL,
+            });
+            Alert.alert('Success', 'Your profile has been synced. You should now be appearing in search results.');
+        } catch (error: any) {
+            Alert.alert('Sync Error', error.message);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
     return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+        <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]} contentContainerStyle={styles.contentContainer}>
             {/* Preferences Card */}
-            <View style={styles.card}>
-                <Text variant="headlineSmall" style={styles.cardTitle}>Preferences</Text>
+            <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outline }]}>
+                <Text variant="headlineSmall" style={[styles.cardTitle, { color: theme.colors.onSurface }]}>Preferences</Text>
 
                 <View style={styles.row}>
-                    <Text style={styles.label}>Dark Mode</Text>
-                    <Switch value={isDarkMode} onValueChange={setIsDarkMode} color="#6200ee" />
+                    <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>Dark Mode</Text>
+                    <Switch value={isDarkMode} onValueChange={toggleTheme} color="#6366f1" />
                 </View>
 
                 <View style={styles.row}>
-                    <Text style={styles.label}>Notifications</Text>
-                    <Switch value={notificationsEnabled} onValueChange={setNotificationsEnabled} color="#6200ee" />
+                    <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>Notifications</Text>
+                    <Switch value={notificationsEnabled} onValueChange={setNotificationsEnabled} color="#6366f1" />
                 </View>
             </View>
 
             {/* Account Card */}
-            <View style={styles.card}>
-                <Text variant="headlineSmall" style={styles.cardTitle}>Account</Text>
+            <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outline }]}>
+                <Text variant="headlineSmall" style={[styles.cardTitle, { color: theme.colors.onSurface }]}>Account</Text>
 
-                <TouchableOpacity style={styles.outlineButton} onPress={handleChangePassword}>
+                <TouchableOpacity style={[styles.outlineButton, { borderColor: theme.colors.outline }]} onPress={handleChangePassword}>
                     <Text style={styles.outlineButtonText}>Change Password</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.outlineButton} onPress={handlePrivacySettings}>
+                <TouchableOpacity style={[styles.outlineButton, { borderColor: theme.colors.outline }]} onPress={handlePrivacySettings}>
                     <Text style={styles.outlineButtonText}>Privacy Settings</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.outlineButton, { borderColor: theme.colors.outline }]}
+                    onPress={handleSyncProfile}
+                    disabled={isSyncing}
+                >
+                    <Text style={styles.outlineButtonText}>{isSyncing ? 'Syncing...' : 'Sync Search Profile'}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>

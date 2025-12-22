@@ -6,6 +6,7 @@ import { Formik } from 'formik';
 import * as Yup from 'yup';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth } from '../../services/firebase';
+import { UserService } from '../../services/UserService';
 import { responsiveHeight, responsiveWidth, responsiveFontSize } from 'react-native-responsive-dimensions';
 
 const SignUpSchema = Yup.object().shape({
@@ -24,6 +25,16 @@ const SignUpScreen = () => {
             await updateProfile(userCredential.user, {
                 displayName: values.name
             });
+
+            // Save user profile to Firestore for search functionality
+            await UserService.upsertUserProfile(userCredential.user.uid, {
+                uid: userCredential.user.uid,
+                displayName: values.name,
+                email: values.email,
+                photoURL: null,
+                createdAt: new Date(),
+            });
+
             // Navigation handled by auth state listener
         } catch (error: any) {
             Alert.alert('Error', error.message);

@@ -1,57 +1,212 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
-import { Text } from 'react-native-paper';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { Text, Button, useTheme } from 'react-native-paper';
+import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import { UserService } from '../../services/UserService';
+import { PostService, Post } from '../../services/PostService';
+import { FriendService } from '../../services/FriendService';
+import { ChatService } from '../../services/ChatService';
+import { responsiveHeight, responsiveWidth, responsiveFontSize } from 'react-native-responsive-dimensions';
 
 const UserProfileScreen = () => {
     const route = useRoute<any>();
-    const navigation = useNavigation();
+    const navigation = useNavigation<any>();
+    const theme = useTheme();
     const { user } = route.params; // Expecting { userName, userAvatar, userId }
 
-    // Placeholder stats since we don't have a full user collection yet
-    const stats = {
-        posts: 12,
-        followers: 156,
-        following: 89
+    // Stats State
+    const [stats, setStats] = useState({ posts: 0, followers: 0, following: 0 });
+    const [isFollowing, setIsFollowing] = useState(false);
+    const [relationship, setRelationship] = useState<'none' | 'sent' | 'received' | 'friends'>('none');
+    const [posts, setPosts] = useState<Post[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [actionLoading, setActionLoading] = useState(false);
+
+    useEffect(() => {
+        fetchData();
+    }, [user.userId]);
+
+    const fetchData = async () => {
+        try {
+            const [postCount, followStats, followingStatus, relStatus] = await Promise.all([
+                PostService.getUserPostCount(user.userId),
+                UserService.getFollowStats(user.userId),
+                UserService.checkIfFollowing(user.userId),
+                FriendService.getRelationshipStatus(user.userId)
+            ]);
+
+            // Set up real-time subscription for user posts
+            const unsubscribePosts = PostService.subscribeToUserPosts(user.userId, (userPosts) => {
+                setPosts(userPosts);
+            });
+
+            setStats({
+                posts: postCount,
+                followers: followStats.followers,
+                following: followStats.following
+            });
+            setIsFollowing(followingStatus);
+            setRelationship(relStatus as any);
+        } catch (error) {
+            console.error("Error fetching user profile data:", error);
+        } finally {
+            setLoading(false);
+        }
     };
 
+    const handleFollowToggle = async () => {
+        setActionLoading(true);
+        try {
+            await UserService.toggleFollow(user.userId, isFollowing);
+            setIsFollowing(!isFollowing);
+            setStats(prev => ({
+                ...prev,
+                followers: isFollowing ? prev.followers - 1 : prev.followers + 1
+            }));
+        } catch (error) {
+            console.error("Error toggling follow:", error);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleFriendAction = async () => {
+        setActionLoading(true);
+        try {
+            if (relationship === 'none') {
+                await FriendService.sendFriendRequest(user.userId, user.userName);
+                setRelationship('sent');
+                Alert.alert('Success', 'Friend request sent!');
+            } else if (relationship === 'received') {
+                navigation.navigate('FriendRequests');
+            }
+        } catch (error: any) {
+            Alert.alert('Error', error.message);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleMessage = async () => {
+        setActionLoading(true);
+        try {
+            const roomId = await ChatService.getOrCreateChatRoom(user.userId);
+            navigation.navigate('Chat', {
+                roomId,
+                partnerName: user.userName,
+                partnerId: user.userId
+            });
+        } catch (error: any) {
+            Alert.alert('Error', error.message);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <View style={[styles.container, styles.center, { backgroundColor: theme.colors.background }]}>
+                <ActivityIndicator size="large" color={theme.colors.primary} />
+            </View>
+        );
+    }
+
     return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+        <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]} contentContainerStyle={styles.contentContainer}>
             {/* Profile Card */}
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]}>
                 <View style={styles.avatarContainer}>
                     <Image
                         source={{ uri: user.userAvatar || 'https://i.pravatar.cc/300' }}
                         style={styles.avatar}
                     />
                 </View>
-                <Text variant="headlineMedium" style={styles.name}>{user.userName || 'Anonymous'}</Text>
+                <Text variant="headlineMedium" style={[styles.name, { color: theme.colors.onSurface }]}>{user.userName || 'Anonymous'}</Text>
 
-                <TouchableOpacity style={styles.followButton} onPress={() => { /* Follow Logic */ }}>
-                    <Text style={styles.followButtonText}>Follow</Text>
-                </TouchableOpacity>
+                <View style={styles.actionRow}>
+                    <Button
+                        mode={isFollowing ? "outlined" : "contained"}
+                        onPress={handleFollowToggle}
+                        loading={actionLoading}
+                        style={styles.actionButton}
+                        labelStyle={{ fontSize: 12 }}
+                    >
+                        {isFollowing ? "Unfollow" : "Follow"}
+                    </Button>
+
+                    <Button
+                        mode={relationship === 'friends' ? "outlined" : "contained"}
+                        onPress={handleFriendAction}
+                        loading={actionLoading}
+                        disabled={relationship === 'sent'}
+                        style={[styles.actionButton, { marginLeft: 10 }]}
+                        labelStyle={{ fontSize: 12 }}
+                        buttonColor={relationship === 'sent' ? theme.colors.surfaceDisabled : undefined}
+                    >
+                        {relationship === 'none' && "Add Friend"}
+                        {relationship === 'sent' && "Pending"}
+                        {relationship === 'received' && "Respond"}
+                        {relationship === 'friends' && "Friends"}
+                    </Button>
+
+                    <Button
+                        mode="contained"
+                        icon="message"
+                        onPress={handleMessage}
+                        style={[styles.actionButton, { marginLeft: 10 }]}
+                        labelStyle={{ fontSize: 12 }}
+                        buttonColor={theme.colors.secondary}
+                    >
+                        Chat
+                    </Button>
+                </View>
             </View>
 
             {/* Activity Card */}
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outline }]}>
                 <View style={styles.statsContainer}>
                     <View style={styles.statItem}>
-                        <Text style={styles.statNumber}>{stats.posts}</Text>
-                        <Text style={styles.statLabel}>Posts</Text>
+                        <Text style={[styles.statNumber, { color: theme.colors.primary }]}>{stats.posts}</Text>
+                        <Text style={[styles.statLabel, { color: theme.colors.onSurfaceVariant }]}>Posts</Text>
                     </View>
                     <View style={styles.statItem}>
-                        <Text style={styles.statNumber}>{stats.followers}</Text>
-                        <Text style={styles.statLabel}>Followers</Text>
+                        <Text style={[styles.statNumber, { color: theme.colors.primary }]}>{stats.followers}</Text>
+                        <Text style={[styles.statLabel, { color: theme.colors.onSurfaceVariant }]}>Followers</Text>
                     </View>
                     <View style={styles.statItem}>
-                        <Text style={styles.statNumber}>{stats.following}</Text>
-                        <Text style={styles.statLabel}>Following</Text>
+                        <Text style={[styles.statNumber, { color: theme.colors.primary }]}>{stats.following}</Text>
+                        <Text style={[styles.statLabel, { color: theme.colors.onSurfaceVariant }]}>Following</Text>
                     </View>
                 </View>
             </View>
 
+            {/* Posts List */}
             <View style={styles.postsContainer}>
-                <Text style={styles.emptyText}>User posts will appear here.</Text>
+                <Text variant="titleLarge" style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>Posts</Text>
+                {posts.length > 0 ? (
+                    posts.map((item) => (
+                        <View key={item.id} style={[styles.postCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]}>
+                            {item.imageUrl && (
+                                <Image source={{ uri: item.imageUrl }} style={styles.postImage} />
+                            )}
+                            <View style={styles.postContent}>
+                                <Text style={[styles.postText, { color: theme.colors.onSurfaceVariant }]}>{item.text}</Text>
+                                <View style={styles.postFooter}>
+                                    <View style={styles.postStat}>
+                                        <FontAwesome name="heart" size={14} color={theme.colors.tertiary} />
+                                        <Text style={[styles.postStatText, { color: theme.colors.onSurfaceVariant }]}>{item.likes}</Text>
+                                    </View>
+                                    <Text style={[styles.postDate, { color: theme.colors.onSurfaceVariant }]}>
+                                        {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : 'Just now'}
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+                    ))
+                ) : (
+                    <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>No posts yet.</Text>
+                )}
             </View>
         </ScrollView>
     );
@@ -60,22 +215,16 @@ const UserProfileScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f7fa',
     },
     contentContainer: {
         padding: 20,
     },
     card: {
-        backgroundColor: '#fff',
         borderRadius: 20,
         padding: 24,
         alignItems: 'center',
         marginBottom: 20,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
+        borderWidth: 1,
     },
     avatarContainer: {
         marginBottom: 16,
@@ -88,18 +237,17 @@ const styles = StyleSheet.create({
     name: {
         fontWeight: 'bold',
         marginBottom: 16,
-        color: '#1a1a1a',
     },
-    followButton: {
-        backgroundColor: '#6200ee',
-        paddingVertical: 10,
-        paddingHorizontal: 40,
+    actionRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        paddingHorizontal: 10,
+    },
+    actionButton: {
         borderRadius: 20,
         marginBottom: 10,
-    },
-    followButtonText: {
-        color: '#fff',
-        fontWeight: 'bold',
+        minWidth: 90,
     },
     statsContainer: {
         flexDirection: 'row',
@@ -112,19 +260,59 @@ const styles = StyleSheet.create({
     statNumber: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: '#1a1a1a',
         marginBottom: 4,
     },
     statLabel: {
-        color: '#666',
         fontSize: 14,
     },
     postsContainer: {
-        marginTop: 20,
+        marginTop: 10,
+    },
+    sectionTitle: {
+        fontWeight: '900',
+        marginBottom: 15,
+        marginLeft: 5,
+    },
+    postCard: {
+        borderRadius: 15,
+        marginBottom: 15,
+        borderWidth: 1,
+        overflow: 'hidden',
+    },
+    postImage: {
+        width: '100%',
+        height: 200,
+    },
+    postContent: {
+        padding: 15,
+    },
+    postText: {
+        fontSize: 16,
+        marginBottom: 10,
+    },
+    postFooter: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    postStat: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    postStatText: {
+        marginLeft: 5,
+        fontSize: 14,
+    },
+    postDate: {
+        fontSize: 12,
     },
     emptyText: {
         textAlign: 'center',
-        color: '#888',
+        marginTop: 20,
+    },
+    center: {
+        justifyContent: 'center',
+        alignItems: 'center',
     }
 });
 

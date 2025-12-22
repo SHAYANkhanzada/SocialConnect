@@ -12,7 +12,8 @@ import {
     increment,
     onSnapshot,
     Unsubscribe,
-    deleteDoc
+    deleteDoc,
+    where
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 
@@ -48,13 +49,22 @@ export const PostService = {
 
     // Subscribe to posts (Real-time)
     subscribeToPosts: (callback: (posts: Post[]) => void): Unsubscribe => {
+        console.log("Subscribing to posts...");
         const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
         return onSnapshot(q, (snapshot) => {
-            const posts = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            } as Post));
+            console.log(`Received ${snapshot.size} posts from Firestore`);
+            const posts = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    // If createdAt is null (pending server timestamp), use current date as fallback
+                    createdAt: data.createdAt || { seconds: Date.now() / 1000 }
+                } as Post;
+            });
             callback(posts);
+        }, (error) => {
+            console.error("Firestore subscription error:", error);
         });
     },
 
@@ -112,6 +122,33 @@ export const PostService = {
 
         const postRef = doc(db, 'posts', postId);
         await deleteDoc(postRef);
+    },
+
+    // Get post count for a user
+    getUserPostCount: async (userId: string): Promise<number> => {
+        const q = query(collection(db, 'posts'), where('userId', '==', userId));
+        const snapshot = await getDocs(q);
+        return snapshot.size;
+    },
+
+    // Subscribe to a specific user's posts
+    subscribeToUserPosts: (userId: string, callback: (posts: Post[]) => void): Unsubscribe => {
+        const q = query(
+            collection(db, 'posts'),
+            where('userId', '==', userId),
+            orderBy('createdAt', 'desc')
+        );
+        return onSnapshot(q, (snapshot) => {
+            const posts = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt || { seconds: Date.now() / 1000 }
+                } as Post;
+            });
+            callback(posts);
+        });
     }
 };
 

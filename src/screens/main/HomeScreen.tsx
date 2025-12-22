@@ -129,7 +129,7 @@ const HomeScreen = () => {
         const isLiked = item.likedBy && item.likedBy.includes(userId || '');
 
         return (
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outline }]}>
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
                         <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { user: item })}>
@@ -139,7 +139,7 @@ const HomeScreen = () => {
                             />
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { user: item })}>
-                            <Text style={styles.username}>{item.userName}</Text>
+                            <Text style={[styles.username, { color: theme.colors.onSurface }]}>{item.userName}</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -151,7 +151,7 @@ const HomeScreen = () => {
                 </View>
 
                 {item.text ? (
-                    <Text style={styles.postText}>{item.text}</Text>
+                    <Text style={[styles.postText, { color: theme.colors.onSurfaceVariant }]}>{item.text}</Text>
                 ) : null}
 
                 {item.imageUrl ? (
@@ -178,8 +178,18 @@ const HomeScreen = () => {
     };
 
     return (
-        <View style={styles.container}>
-            <Text variant="headlineMedium" style={styles.pageTitle}>Explore Posts</Text>
+        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+            <View style={styles.topHeader}>
+                <Text variant="headlineMedium" style={[styles.pageTitle, { color: theme.colors.onSurface }]}>Explore Posts</Text>
+                <View style={styles.headerActions}>
+                    <TouchableOpacity onPress={() => navigation.navigate('FriendRequests')} style={styles.headerIconButton}>
+                        <FontAwesome name="user-plus" size={responsiveFontSize(2.5)} color={theme.colors.onSurface} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => navigation.navigate('ChatList')} style={[styles.headerIconButton, { marginLeft: 15 }]}>
+                        <FontAwesome name="envelope-o" size={responsiveFontSize(2.5)} color={theme.colors.onSurface} />
+                    </TouchableOpacity>
+                </View>
+            </View>
             <FlatList
                 data={posts}
                 renderItem={renderItem}
@@ -213,6 +223,20 @@ const styles = StyleSheet.create({
         paddingBottom: responsiveHeight(2),
         fontWeight: '900',
         fontSize: responsiveFontSize(3),
+    },
+    topHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingRight: responsiveWidth(5),
+    },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingTop: responsiveHeight(1),
+    },
+    headerIconButton: {
+        padding: 5,
     },
     list: {
         paddingHorizontal: responsiveWidth(4),
