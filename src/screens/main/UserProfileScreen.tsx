@@ -20,6 +20,7 @@ const UserProfileScreen = () => {
     const [isFollowing, setIsFollowing] = useState(false);
     const [relationship, setRelationship] = useState<'none' | 'sent' | 'received' | 'friends'>('none');
     const [posts, setPosts] = useState<Post[]>([]);
+    const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
 
@@ -29,11 +30,12 @@ const UserProfileScreen = () => {
 
     const fetchData = async () => {
         try {
-            const [postCount, followStats, followingStatus, relStatus] = await Promise.all([
+            const [postCount, followStats, followingStatus, relStatus, freshProfile] = await Promise.all([
                 PostService.getUserPostCount(user.userId),
                 UserService.getFollowStats(user.userId),
                 UserService.checkIfFollowing(user.userId),
-                FriendService.getRelationshipStatus(user.userId)
+                FriendService.getRelationshipStatus(user.userId),
+                UserService.getUserProfile(user.userId)
             ]);
 
             // Set up real-time subscription for user posts
@@ -48,6 +50,7 @@ const UserProfileScreen = () => {
             });
             setIsFollowing(followingStatus);
             setRelationship(relStatus as any);
+            setProfile(freshProfile);
         } catch (error) {
             console.error("Error fetching user profile data:", error);
         } finally {
@@ -118,11 +121,11 @@ const UserProfileScreen = () => {
             <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]}>
                 <View style={styles.avatarContainer}>
                     <Image
-                        source={{ uri: user.userAvatar || 'https://i.pravatar.cc/300' }}
+                        source={{ uri: profile?.photoURL || user.userAvatar || 'https://i.pravatar.cc/300' }}
                         style={styles.avatar}
                     />
                 </View>
-                <Text variant="headlineMedium" style={[styles.name, { color: theme.colors.onSurface }]}>{user.userName || 'Anonymous'}</Text>
+                <Text variant="headlineMedium" style={[styles.name, { color: theme.colors.onSurface }]}>{profile?.displayName || user.userName || 'Anonymous'}</Text>
 
                 <View style={styles.actionRow}>
                     <Button

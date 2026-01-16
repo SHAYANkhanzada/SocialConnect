@@ -8,7 +8,9 @@ import {
     where,
     orderBy,
     limit,
-    deleteDoc
+    deleteDoc,
+    onSnapshot,
+    Unsubscribe
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 
@@ -18,6 +20,8 @@ export interface UserProfile {
     displayNameLower: string; // For case-insensitive search
     email: string;
     photoURL: string | null;
+    bio?: string;
+    fcmToken?: string;
     createdAt: any;
 }
 
@@ -34,14 +38,53 @@ export const UserService = {
         await setDoc(userRef, updateData, { merge: true });
     },
 
+    // Sync current user with Firestore (useful on login/startup)
+    syncUserWithFirestore: async () => {
+        const user = auth.currentUser;
+        if (!user) return;
+
+        const userRef = doc(db, 'users', user.uid);
+
+        const displayName = user.displayName || 'Anonymous';
+        const profileData: any = {
+            uid: user.uid,
+            displayName: displayName,
+            displayNameLower: displayName.toLowerCase(),
+            email: user.email,
+            photoURL: user.photoURL,
+            updatedAt: new Date()
+        };
+
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) {
+            profileData.createdAt = new Date();
+            profileData.bio = ""; // Initial bio
+        }
+
+        await setDoc(userRef, profileData, { merge: true });
+        console.log(`Synced user ${user.uid} to Firestore as "${displayName}"`);
+    },
+
     // Get a single user profile
     getUserProfile: async (uid: string): Promise<UserProfile | null> => {
         const userRef = doc(db, 'users', uid);
         const userSnap = await getDoc(userRef);
         if (userSnap.exists()) {
-            return userSnap.data() as UserProfile;
+            return { uid: userSnap.id, ...userSnap.data() } as UserProfile;
         }
         return null;
+    },
+
+    // Subscribe to a user profile (Real-time)
+    subscribeToUserProfile: (uid: string, callback: (profile: UserProfile | null) => void): Unsubscribe => {
+        const userRef = doc(db, 'users', uid);
+        return onSnapshot(userRef, (snapshot) => {
+            if (snapshot.exists()) {
+                callback({ uid: snapshot.id, ...snapshot.data() } as UserProfile);
+            } else {
+                callback(null);
+            }
+        });
     },
 
     // Search users by display name (case-insensitive prefix search)
@@ -64,7 +107,17 @@ export const UserService = {
         let querySnapshot = await getDocs(qLower);
         console.log(`Found ${querySnapshot.size} results with displayNameLower`);
 
-        // Fallback: If no results, try case-sensitive search for older accounts
+        // Fallback or Addition: Try exact match for email if applicable
+        if (querySnapshot.empty && trimmedTerm.includes('@')) {
+            const qEmail = query(
+                collection(db, 'users'),
+                where('email', '==', trimmedTerm),
+                limit(1)
+            );
+            querySnapshot = await getDocs(qEmail);
+        }
+
+        // Secondary Fallback: case-sensitive search for older accounts
         if (querySnapshot.empty) {
             console.log("No results with lowercase, trying case-sensitive fallback...");
             const qNormal = query(
@@ -74,14 +127,13 @@ export const UserService = {
                 limit(20)
             );
             querySnapshot = await getDocs(qNormal);
-            console.log(`Found ${querySnapshot.size} results with case-sensitive fallback`);
         }
 
         const results = querySnapshot.docs
             .map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
-        // .filter(user => user.uid !== auth.currentUser?.uid); // Temporarily commented out for testing
 
-        console.log(`Final results count (after filtering self): ${results.length}`);
+        // We include self in results so the user can see their own indexed profile
+        console.log(`Final results count: ${results.length}`);
         return results;
     },
 

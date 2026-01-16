@@ -1,18 +1,10 @@
 import messaging from '@react-native-firebase/messaging';
-import { Alert, PermissionsAndroid, Platform } from 'react-native';
+import { Alert, Platform } from 'react-native';
+import { UserService } from './UserService';
 
 export const NotificationService = {
+    // Request user permission for notifications
     requestUserPermission: async () => {
-        if (Platform.OS === 'android' && Platform.Version >= 33) {
-            const granted = await PermissionsAndroid.request(
-                PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-            );
-            if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-                console.log('Notification permission denied');
-                return false;
-            }
-        }
-
         const authStatus = await messaging().requestPermission();
         const enabled =
             authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
@@ -25,35 +17,43 @@ export const NotificationService = {
         return false;
     },
 
-    getFCMToken: async () => {
+    // Get FCM Token and save it to Firestore
+    getFcmToken: async (userId: string) => {
         try {
             const token = await messaging().getToken();
-            console.log('FCM Token:', token);
-            return token;
+            if (token) {
+                console.log('FCM Token:', token);
+                await UserService.upsertUserProfile(userId, { fcmToken: token });
+            }
         } catch (error) {
             console.error('Error getting FCM token:', error);
-            return null;
         }
     },
 
-    listenToForegroundNotifications: () => {
-        return messaging().onMessage(async remoteMessage => {
+    // Setup notification listeners
+    setupListeners: () => {
+        // When the app is in foreground
+        const unsubscribeForeground = messaging().onMessage(async remoteMessage => {
             Alert.alert(
-                remoteMessage.notification?.title || 'Notification',
-                remoteMessage.notification?.body || 'New interaction in SocialConnect'
+                remoteMessage.notification?.title || 'New Notification',
+                remoteMessage.notification?.body || 'You have a new update!'
             );
         });
-    },
 
-    setupNotifications: async () => {
-        const hasPermission = await NotificationService.requestUserPermission();
-        if (hasPermission) {
-            await NotificationService.getFCMToken();
-        }
-
-        // Handle background/quit state notifications
-        messaging().setBackgroundMessageHandler(async remoteMessage => {
-            console.log('Message handled in the background!', remoteMessage);
+        // When the app is opened from a notification (background state)
+        messaging().onNotificationOpenedApp(remoteMessage => {
+            console.log('Notification caused app to open from background state:', remoteMessage.notification);
         });
-    }
+
+        // When the app is opened from a notification (quit state)
+        messaging()
+            .getInitialNotification()
+            .then(remoteMessage => {
+                if (remoteMessage) {
+                    console.log('Notification caused app to open from quit state:', remoteMessage.notification);
+                }
+            });
+
+        return unsubscribeForeground;
+    },
 };

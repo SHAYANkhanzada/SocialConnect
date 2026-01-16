@@ -3,13 +3,16 @@ import { View, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator,
 import { Searchbar, Text, List, useTheme, Avatar } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { UserService, UserProfile } from '../../services/UserService';
+import { PostService, Post } from '../../services/PostService';
 import { responsiveHeight, responsiveWidth, responsiveFontSize } from 'react-native-responsive-dimensions';
 
 const SearchScreen = () => {
     const navigation = useNavigation<any>();
     const theme = useTheme();
     const [searchQuery, setSearchQuery] = useState('');
+    const [searchType, setSearchType] = useState<'users' | 'posts'>('users');
     const [users, setUsers] = useState<UserProfile[]>([]);
+    const [posts, setPosts] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -18,18 +21,32 @@ const SearchScreen = () => {
                 handleSearch();
             } else {
                 setUsers([]);
+                setPosts([]);
             }
         }, 500);
 
         return () => clearTimeout(delayDebounceFn);
-    }, [searchQuery]);
+    }, [searchQuery, searchType]);
 
     const handleSearch = async () => {
+        const trimmed = searchQuery.trim();
+        if (!trimmed) {
+            setUsers([]);
+            setPosts([]);
+            return;
+        }
+
         setLoading(true);
         try {
-            const results = await UserService.searchUsers(searchQuery);
-            setUsers(results);
-            // Removed debug alert
+            if (searchType === 'users') {
+                console.log(`Searching for users with query: "${trimmed}"`);
+                const results = await UserService.searchUsers(trimmed);
+                setUsers(results);
+            } else {
+                console.log(`Searching for posts with query: "${trimmed}"`);
+                const results = await PostService.searchPosts(trimmed);
+                setPosts(results);
+            }
         } catch (error: any) {
             console.error("Search error:", error);
             Alert.alert("Search Error", error.message);
@@ -60,12 +77,30 @@ const SearchScreen = () => {
         />
     );
 
+    const renderPostItem = ({ item }: { item: Post }) => (
+        <TouchableOpacity
+            style={[styles.postItem, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]}
+            onPress={() => navigation.navigate('Comments', { postId: item.id })}
+        >
+            <View style={styles.postHeader}>
+                <Image
+                    source={{ uri: item.userAvatar || 'https://i.pravatar.cc/100' }}
+                    style={styles.postAvatar}
+                />
+                <Text style={[styles.postUser, { color: theme.colors.onSurface }]}>{item.userName}</Text>
+            </View>
+            <Text numberOfLines={2} style={[styles.postCaption, { color: theme.colors.onSurfaceVariant }]}>
+                {item.text}
+            </Text>
+        </TouchableOpacity>
+    );
+
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <Text variant="headlineMedium" style={[styles.pageTitle, { color: theme.colors.onSurface }]}>Find People</Text>
             <View style={styles.searchContainer}>
                 <Searchbar
-                    placeholder="Search by username..."
+                    placeholder={searchType === 'users' ? "Search by username..." : "Search posts..."}
                     onChangeText={setSearchQuery}
                     value={searchQuery}
                     style={[styles.searchBar, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]}
@@ -77,23 +112,45 @@ const SearchScreen = () => {
                 />
             </View>
 
-            {loading && users.length === 0 ? (
+            <View style={styles.typeToggle}>
+                <TouchableOpacity
+                    onPress={() => setSearchType('users')}
+                    style={[styles.toggleButton, searchType === 'users' && { backgroundColor: theme.colors.primaryContainer }]}
+                >
+                    <Text style={{ color: searchType === 'users' ? theme.colors.primary : theme.colors.onSurfaceVariant, fontWeight: 'bold' }}>Users</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    onPress={() => setSearchType('posts')}
+                    style={[styles.toggleButton, searchType === 'posts' && { backgroundColor: theme.colors.primaryContainer }]}
+                >
+                    <Text style={{ color: searchType === 'posts' ? theme.colors.primary : theme.colors.onSurfaceVariant, fontWeight: 'bold' }}>Posts</Text>
+                </TouchableOpacity>
+            </View>
+
+            {loading && (searchType === 'users' ? users.length === 0 : posts.length === 0) ? (
                 <View style={styles.center}>
                     <ActivityIndicator size="large" color={theme.colors.primary} />
                 </View>
             ) : (
                 <FlatList
-                    data={users}
-                    renderItem={renderUserItem}
-                    keyExtractor={item => item.uid}
+                    data={searchType === 'users' ? (users as any[]) : (posts as any[])}
+                    renderItem={({ item }) => searchType === 'users' ? renderUserItem({ item: item as UserProfile }) : renderPostItem({ item: item as Post })}
+                    keyExtractor={item => item.uid || item.id}
                     contentContainerStyle={styles.list}
                     ListEmptyComponent={() => (
-                        searchQuery.length > 0 && !loading ? (
-                            <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>No users found with that name.</Text>
+                        searchQuery.trim().length > 0 && !loading ? (
+                            <View style={styles.introContainer}>
+                                <Avatar.Icon size={80} icon={searchType === 'users' ? "account-off-outline" : "file-search-outline"} style={[styles.introIcon, { backgroundColor: theme.colors.errorContainer }]} />
+                                <Text style={[styles.introText, { color: theme.colors.onSurfaceVariant }]}>
+                                    No {searchType} found with "{searchQuery.trim()}".
+                                </Text>
+                            </View>
                         ) : (
                             <View style={styles.introContainer}>
-                                <Avatar.Icon size={80} icon="account-search-outline" style={[styles.introIcon, { backgroundColor: theme.colors.secondaryContainer }]} />
-                                <Text style={[styles.introText, { color: theme.colors.onSurfaceVariant }]}>Search for your friends and connect!</Text>
+                                <Avatar.Icon size={80} icon={searchType === 'users' ? "account-search-outline" : "card-search-outline"} style={[styles.introIcon, { backgroundColor: theme.colors.secondaryContainer }]} />
+                                <Text style={[styles.introText, { color: theme.colors.onSurfaceVariant }]}>
+                                    {searchType === 'users' ? "Search for your friends and connect!" : "Search for interesting posts!"}
+                                </Text>
                             </View>
                         )
                     )}
@@ -165,6 +222,41 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         paddingHorizontal: 40,
     },
+    typeToggle: {
+        flexDirection: 'row',
+        paddingHorizontal: responsiveWidth(5),
+        marginBottom: responsiveHeight(2),
+    },
+    toggleButton: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        marginRight: 10,
+    },
+    postItem: {
+        padding: 15,
+        borderRadius: 12,
+        marginBottom: 10,
+        borderWidth: 1,
+    },
+    postHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    postAvatar: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        marginRight: 10,
+    },
+    postUser: {
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
+    postCaption: {
+        fontSize: 14,
+    }
 });
 
 export default SearchScreen;

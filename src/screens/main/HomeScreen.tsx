@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, FlatList, Image, TouchableOpacity, Share, Alert, RefreshControl } from 'react-native';
+import { View, StyleSheet, FlatList, Image, TouchableOpacity, Share, Alert, RefreshControl, ActivityIndicator } from 'react-native';
 import { Text, FAB, useTheme } from 'react-native-paper';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import { useNavigation } from '@react-navigation/native';
@@ -13,18 +13,28 @@ const HomeScreen = () => {
     const theme = useTheme();
     const [posts, setPosts] = useState<Post[]>([]);
     const [refreshing, setRefreshing] = useState(false);
+    const [loading, setLoading] = useState(true);
     const userId = auth.currentUser?.uid;
 
     // Real-time subscription matches here (keeping clean)
 
     // Real-time subscription
     useEffect(() => {
-        const unsubscribe = PostService.subscribeToPosts((updatedPosts) => {
+        if (!userId) return;
+        setLoading(true);
+        console.log(`Setting up unified feed subscription for user: ${userId}`);
+
+        const unsubscribe = PostService.subscribeToAllPosts((updatedPosts) => {
+            console.log(`Received ${updatedPosts.length} posts for unified feed`);
             setPosts(updatedPosts);
+            setLoading(false);
         });
 
-        return () => unsubscribe();
-    }, []);
+        return () => {
+            console.log("Cleaning up feed subscription");
+            unsubscribe && unsubscribe();
+        };
+    }, [userId]);
 
     const onRefresh = async () => {
         setRefreshing(true);
@@ -144,9 +154,14 @@ const HomeScreen = () => {
                     </View>
 
                     {item.userId === userId && (
-                        <TouchableOpacity onPress={() => handleDeletePost(item.id)}>
-                            <FontAwesome name="trash-o" size={responsiveFontSize(2.2)} color={theme.colors.error} />
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <TouchableOpacity onPress={() => navigation.navigate('EditPost', { post: item })} style={{ marginRight: 15 }}>
+                                <FontAwesome name="pencil" size={responsiveFontSize(2.2)} color={theme.colors.primary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => handleDeletePost(item.id)}>
+                                <FontAwesome name="trash-o" size={responsiveFontSize(2.2)} color={theme.colors.error} />
+                            </TouchableOpacity>
+                        </View>
                     )}
                 </View>
 
@@ -180,9 +195,14 @@ const HomeScreen = () => {
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <View style={styles.topHeader}>
-                <Text variant="headlineMedium" style={[styles.pageTitle, { color: theme.colors.onSurface }]}>Explore Posts</Text>
+                <View>
+                    <Text variant="headlineMedium" style={[styles.pageTitle, { color: theme.colors.onSurface }]}>SocialConnect</Text>
+                </View>
                 <View style={styles.headerActions}>
-                    <TouchableOpacity onPress={() => navigation.navigate('FriendRequests')} style={styles.headerIconButton}>
+                    <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.headerIconButton}>
+                        <FontAwesome name="search" size={responsiveFontSize(2.5)} color={theme.colors.onSurface} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => navigation.navigate('FriendRequests')} style={[styles.headerIconButton, { marginLeft: 15 }]}>
                         <FontAwesome name="user-plus" size={responsiveFontSize(2.5)} color={theme.colors.onSurface} />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => navigation.navigate('ChatList')} style={[styles.headerIconButton, { marginLeft: 15 }]}>
@@ -196,11 +216,30 @@ const HomeScreen = () => {
                 keyExtractor={item => item.id}
                 contentContainerStyle={styles.list}
                 showsVerticalScrollIndicator={false}
+                removeClippedSubviews={true}
+                initialNumToRender={5}
+                maxToRenderPerBatch={10}
+                windowSize={5}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
                 }
                 ListEmptyComponent={
-                    <Text style={{ textAlign: 'center', marginTop: 20 }}>No posts yet. Be the first to post!</Text>
+                    loading ? (
+                        <View style={{ marginTop: 50 }}>
+                            <ActivityIndicator size="large" color={theme.colors.primary} />
+                            <Text style={{ textAlign: 'center', marginTop: 10 }}>Fetching latest posts...</Text>
+                        </View>
+                    ) : (
+                        <View style={{ marginTop: 50, alignItems: 'center' }}>
+                            <FontAwesome name="newspaper-o" size={50} color={theme.colors.outline} />
+                            <Text style={{ textAlign: 'center', marginTop: 20, fontSize: 16 }}>
+                                No posts found in the community yet.
+                            </Text>
+                            <TouchableOpacity onPress={() => navigation.navigate('Search')} style={{ marginTop: 15 }}>
+                                <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>Find people to follow</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )
                 }
             />
 
@@ -220,7 +259,6 @@ const styles = StyleSheet.create({
     pageTitle: {
         paddingHorizontal: responsiveWidth(5),
         paddingTop: responsiveHeight(3),
-        paddingBottom: responsiveHeight(2),
         fontWeight: '900',
         fontSize: responsiveFontSize(3),
     },
@@ -229,6 +267,20 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingRight: responsiveWidth(5),
+        paddingBottom: responsiveHeight(1),
+    },
+    tabContainer: {
+        flexDirection: 'row',
+        paddingHorizontal: responsiveWidth(5),
+        marginTop: responsiveHeight(1),
+    },
+    tab: {
+        marginRight: 20,
+        paddingBottom: 5,
+    },
+    tabText: {
+        fontSize: responsiveFontSize(1.8),
+        fontWeight: '700',
     },
     headerActions: {
         flexDirection: 'row',

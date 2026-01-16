@@ -6,6 +6,7 @@ import { Formik } from 'formik';
 import * as Yup from 'yup';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../services/firebase';
+import { UserService } from '../../services/UserService';
 import { responsiveHeight, responsiveWidth, responsiveFontSize } from 'react-native-responsive-dimensions';
 
 const LoginSchema = Yup.object().shape({
@@ -20,6 +21,8 @@ const LoginScreen = () => {
     const handleLogin = async (values: any) => {
         try {
             await signInWithEmailAndPassword(auth, values.email, values.password);
+            // Sync user profile to Firestore
+            await UserService.syncUserWithFirestore();
             // Navigation will be handled by the auth state listener in RootNavigator
         } catch (error: any) {
             Alert.alert('Error', error.message);

@@ -3,7 +3,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Provider as PaperProvider } from 'react-native-paper';
 import RootNavigator from './src/navigation/RootNavigator';
 import { AppTheme, AppDarkTheme } from './src/theme/theme';
-import { NotificationService } from './src/services/NotificationService';
 import { ThemeProvider, useAppTheme } from './src/context/ThemeContext';
 
 const Main = () => {
@@ -18,12 +17,6 @@ const Main = () => {
 };
 
 function App() {
-  React.useEffect(() => {
-    NotificationService.setupNotifications();
-    const unsubscribe = NotificationService.listenToForegroundNotifications();
-    return () => unsubscribe();
-  }, []);
-
   return (
     <SafeAreaProvider>
       <ThemeProvider>

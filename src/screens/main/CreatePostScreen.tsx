@@ -8,26 +8,23 @@ import { useNavigation } from '@react-navigation/native';
 const CreatePostScreen = () => {
     const navigation = useNavigation();
     const [text, setText] = useState('');
-    const [image, setImage] = useState<string | null>(null);
+    const [image, setImage] = useState<{ uri: string; base64: string } | null>(null);
     const [loading, setLoading] = useState(false);
 
     const pickImage = async () => {
         const result = await launchImageLibrary({
             mediaType: 'photo',
-            quality: 0.7,
-            includeBase64: true, // In a real app, upload to Firebase Storage and get URL.
-            // For now, we might use base64 or file URI if testing locally, 
-            // but Firestore has size limits. 
-            // NOTE: The user prompt asked to "Save and fetch posts from a backend".
-            // Uploading images to Firestore directly (base64) is bad practice but easiest without Storage setup.
-            // However, I should ideally use Firebase Storage.
-            // Given I don't have Storage rules or setup explicitly guaranteed, 
-            // I will try to use the URI. If it's a local URI, it won't work for other users.
-            // I'll stick to text mainly or use a placeholder logic if storage fails.
+            quality: 0.5, // Reduced quality for Base64 storage
+            maxWidth: 600, // Limit width to stay under 1MB Firestore limit
+            maxHeight: 600, // Limit height
+            includeBase64: true,
         });
 
         if (result.assets && result.assets.length > 0) {
-            setImage(result.assets[0].uri || null);
+            const asset = result.assets[0];
+            if (asset.uri && asset.base64) {
+                setImage({ uri: asset.uri, base64: asset.base64 });
+            }
         }
     };
 
@@ -39,14 +36,25 @@ const CreatePostScreen = () => {
 
         setLoading(true);
         try {
-            // TODO: Upload image to Firebase Storage here and get URL
-            // For this iteration, we will just pass the local URI (which is imperfect for production)
-            // or just the text. 
-            await PostService.createPost(text, image);
+            let uploadedImageUrl: string | null = null;
+            if (image) {
+                console.log("Uploading image using base64...");
+                uploadedImageUrl = await PostService.uploadImage(image.base64);
+                console.log("Image uploaded:", uploadedImageUrl);
+            }
+
+            await PostService.createPost(text, uploadedImageUrl);
             Alert.alert('Success', 'Post created successfully!');
             navigation.goBack();
         } catch (error: any) {
-            Alert.alert('Error', error.message);
+            console.error("Create Post Error:", error);
+            let errorMessage = "Could not save post. Please check your internet connection.";
+            if (error.code === 'permission-denied') {
+                errorMessage = "Firebase permission denied. Check security rules or project quota.";
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+            Alert.alert('Error', errorMessage);
         } finally {
             setLoading(false);
         }
@@ -65,7 +73,7 @@ const CreatePostScreen = () => {
             />
 
             {image && (
-                <Image source={{ uri: image }} style={styles.previewImage} />
+                <Image source={{ uri: image.uri }} style={styles.previewImage} />
             )}
 
             <Button icon="camera" mode="outlined" onPress={pickImage} style={styles.button}>

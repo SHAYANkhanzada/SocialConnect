@@ -13,6 +13,7 @@ const Stack = createNativeStackNavigator();
 
 import CommentsScreen from '../screens/main/CommentsScreen';
 import UserProfileScreen from '../screens/main/UserProfileScreen';
+import EditPostScreen from '../screens/main/EditPostScreen';
 import SearchScreen from '../screens/main/SearchScreen';
 
 import ChatListScreen from '../screens/main/ChatListScreen';
@@ -23,8 +24,10 @@ const HomeStack = () => (
     <Stack.Navigator>
         <Stack.Screen name="Feed" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="CreatePost" component={CreatePostScreen} options={{ title: 'Create Post' }} />
+        <Stack.Screen name="EditPost" component={EditPostScreen} options={{ title: 'Edit Post' }} />
         <Stack.Screen name="Comments" component={CommentsScreen} options={{ title: 'Comments' }} />
         <Stack.Screen name="UserProfile" component={UserProfileScreen} options={{ title: 'Profile' }} />
+        <Stack.Screen name="Search" component={SearchScreen} options={{ title: 'Search Users' }} />
         <Stack.Screen name="ChatList" component={ChatListScreen} options={{ title: 'Messages' }} />
         <Stack.Screen name="Chat" component={ChatScreen} options={({ route }: any) => ({ title: route.params.partnerName || 'Chat' })} />
         <Stack.Screen name="FriendRequests" component={FriendRequestsScreen} options={{ title: 'Requests' }} />
@@ -45,8 +48,6 @@ const AppNavigator = () => {
 
                     if (route.name === 'HomeStack') {
                         iconName = 'home';
-                    } else if (route.name === 'Search') {
-                        iconName = 'search';
                     } else if (route.name === 'Profile') {
                         iconName = 'user';
                     } else if (route.name === 'Settings') {
@@ -64,7 +65,6 @@ const AppNavigator = () => {
             })}
         >
             <Tab.Screen name="HomeStack" component={HomeStack} options={{ title: 'Home' }} />
-            <Tab.Screen name="Search" component={SearchScreen} />
             <Tab.Screen name="Profile" component={ProfileScreen} />
             <Tab.Screen name="Settings" component={SettingsScreen} />
         </Tab.Navigator>

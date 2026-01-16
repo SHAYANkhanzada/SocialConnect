@@ -13,9 +13,12 @@ import {
     onSnapshot,
     Unsubscribe,
     deleteDoc,
-    where
+    where,
+    limit
 } from 'firebase/firestore';
-import { db, auth } from './firebase';
+import { ref, uploadBytes, getDownloadURL, uploadString } from 'firebase/storage';
+import { db, auth, storage } from './firebase';
+import { UserService } from './UserService';
 
 export interface Post {
     id: string;
@@ -35,16 +38,39 @@ export const PostService = {
         const user = auth.currentUser;
         if (!user) throw new Error("User not authenticated");
 
-        await addDoc(collection(db, 'posts'), {
-            userId: user.uid,
-            userName: user.displayName || 'Anonymous',
-            userAvatar: user.photoURL,
-            text,
-            imageUrl,
-            likes: 0,
-            likedBy: [],
-            createdAt: serverTimestamp(),
-        });
+        // Fetch latest user profile from Firestore to get the Base64 photoURL
+        const userProfile = await UserService.getUserProfile(user.uid);
+        const displayName = userProfile?.displayName || user.displayName || 'Anonymous';
+        const photoURL = userProfile?.photoURL || user.photoURL;
+
+        try {
+            await addDoc(collection(db, 'posts'), {
+                userId: user.uid,
+                userName: displayName,
+                userAvatar: photoURL,
+                text,
+                textLower: text.toLowerCase(),
+                imageUrl,
+                likes: 0,
+                likedBy: [],
+                createdAt: serverTimestamp(),
+            });
+        } catch (error: any) {
+            console.error("Firestore createPost Error:", error);
+            if (error.code === 'permission-denied') {
+                throw new Error("Permission Denied: Please check your Firebase Security Rules in the console.");
+            } else if (error.message && error.message.includes('too large')) {
+                throw new Error("Image too large: Please try a smaller image or reduce quality.");
+            }
+            throw error;
+        }
+    },
+
+    // "Upload" image (now just returns base64 for Firestore storage to bypass Storage limits)
+    uploadImage: async (base64: string): Promise<string> => {
+        // We just return it as a data URL so it can be stored in Firestore
+        // and displayed easily in the app.
+        return `data:image/jpeg;base64,${base64}`;
     },
 
     // Subscribe to posts (Real-time)
@@ -64,7 +90,7 @@ export const PostService = {
             });
             callback(posts);
         }, (error) => {
-            console.error("Firestore subscription error:", error);
+            console.error("Firestore subscription error (Global):", error);
         });
     },
 
@@ -113,6 +139,21 @@ export const PostService = {
                 ...doc.data()
             } as Comment));
             callback(comments);
+        }, (error) => {
+            console.error("Firestore subscription error (Comments):", error);
+        });
+    },
+
+    // Update a post
+    updatePost: async (postId: string, text: string) => {
+        const user = auth.currentUser;
+        if (!user) throw new Error("User not authenticated");
+
+        const postRef = doc(db, 'posts', postId);
+        await updateDoc(postRef, {
+            text,
+            textLower: text.toLowerCase(),
+            updatedAt: serverTimestamp(),
         });
     },
     // Delete a post
@@ -148,7 +189,107 @@ export const PostService = {
                 } as Post;
             });
             callback(posts);
+        }, (error) => {
+            console.error("Firestore subscription error (UserPosts):", error);
         });
+    },
+
+    // Subscribe to following posts
+    subscribeToFollowingPosts: (userId: string, callback: (posts: Post[]) => void): Unsubscribe => {
+        const followingQuery = query(collection(db, 'follows'), where('followerId', '==', userId));
+        let unsubscribePosts: Unsubscribe | null = null;
+
+        const unsubscribeFollowing = onSnapshot(followingQuery, (followingSnapshot) => {
+            // Unsubscribe existing post listener if it exists
+            if (unsubscribePosts) {
+                unsubscribePosts();
+            }
+
+            // Start with current user's ID
+            const followingIds = [userId];
+
+            // Add users that are being followed
+            followingSnapshot.docs.forEach(doc => {
+                const followingId = doc.data().followingId;
+                if (followingId && !followingIds.includes(followingId)) {
+                    followingIds.push(followingId);
+                }
+            });
+
+            // Limit to 10 (Safest Firestore limit for 'in' query)
+            const limitedIds = followingIds.slice(0, 10);
+
+            const q = query(
+                collection(db, 'posts'),
+                where('userId', 'in', limitedIds),
+                orderBy('createdAt', 'desc')
+            );
+
+            unsubscribePosts = onSnapshot(q, (snapshot) => {
+                const posts = snapshot.docs.map(doc => {
+                    const data = doc.data();
+                    return {
+                        id: doc.id,
+                        ...data,
+                        createdAt: data.createdAt || { seconds: Date.now() / 1000 }
+                    } as Post;
+                });
+                callback(posts);
+            }, (error) => {
+                console.error("Firestore subscription error (Following):", error);
+            });
+        }, (error) => {
+            console.error("Firestore subscription error (FollowList):", error);
+        });
+
+        // Return a combined unsubscribe function
+        return () => {
+            unsubscribeFollowing();
+            if (unsubscribePosts) {
+                unsubscribePosts();
+            }
+        };
+    },
+
+    // Subscribe to all posts (Global Feed)
+    subscribeToAllPosts: (callback: (posts: Post[]) => void): Unsubscribe => {
+        console.log("Subscribing to all posts...");
+        const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(50));
+        return onSnapshot(q, (snapshot) => {
+            console.log(`Firestore Snapshot: ${snapshot.size} posts found`);
+            const posts = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt || { seconds: Date.now() / 1000 }
+                } as Post;
+            });
+            callback(posts);
+        }, (error) => {
+            console.error("Firestore Global Feed Subscription Error:", error);
+            // Optionally stop loading state in UI by calling callback with empty array or handling error
+            callback([]);
+        });
+    },
+
+    // Search posts by text
+    searchPosts: async (searchTerm: string): Promise<Post[]> => {
+        const trimmedTerm = searchTerm.trim().toLowerCase();
+        if (!trimmedTerm) return [];
+
+        const q = query(
+            collection(db, 'posts'),
+            where('textLower', '>=', trimmedTerm),
+            where('textLower', '<=', trimmedTerm + '\uf8ff'),
+            limit(20)
+        );
+
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        } as Post));
     }
 };
 

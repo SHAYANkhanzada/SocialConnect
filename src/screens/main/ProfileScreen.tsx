@@ -15,7 +15,9 @@ const ProfileScreen = () => {
 
     // Edit Form State
     const [name, setName] = useState(user?.displayName || '');
+    const [bio, setBio] = useState('');
     const [photoURL, setPhotoURL] = useState(user?.photoURL || null);
+    const [newPhotoBase64, setNewPhotoBase64] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
     // Stats State
@@ -25,13 +27,28 @@ const ProfileScreen = () => {
         following: 0
     });
 
+    const [profile, setProfile] = useState<any>(null);
+
     useEffect(() => {
-        setName(user?.displayName || '');
-        setPhotoURL(user?.photoURL || null);
-        if (user) {
-            fetchStats();
-        }
+        if (!user) return;
+
+        setName(user.displayName || '');
+        fetchStats();
+
+        // Real-time listener for bio and photoURL from Firestore
+        const unsubscribe = UserService.subscribeToUserProfile(user.uid, (p) => {
+            if (p) {
+                setProfile(p);
+                setBio(p.bio || '');
+                setPhotoURL(p.photoURL || null);
+                if (p.displayName) setName(p.displayName);
+            }
+        });
+
+        return () => unsubscribe();
     }, [user, modalVisible]);
+
+    // Removed fetchUserProfile as we now use subscribeToUserProfile
 
     const fetchStats = async () => {
         if (!user) return;
@@ -54,19 +71,31 @@ const ProfileScreen = () => {
         if (!user) return;
         setLoading(true);
         try {
+            let finalPhotoURL = photoURL;
+
+            // If we have a new photo, upload it first
+            if (newPhotoBase64) {
+                console.log("Uploading new profile picture...");
+                finalPhotoURL = await PostService.uploadImage(newPhotoBase64, 'profiles');
+                console.log("Profile picture uploaded:", finalPhotoURL);
+            }
+
             await updateProfile(user, {
                 displayName: name,
-                photoURL: photoURL,
+                // Do NOT send photoURL here if it's potentially a long Base64 string
             });
 
-            // Sync with Firestore for searchability
+            // Sync with Firestore - This is where the Base64 image is stored
             await UserService.upsertUserProfile(user.uid, {
                 displayName: name,
-                photoURL: photoURL,
+                photoURL: finalPhotoURL,
+                bio: bio,
             });
             Alert.alert('Success', 'Profile updated successfully!');
+            setNewPhotoBase64(null); // Clear temporary base64
             setModalVisible(false);
         } catch (error: any) {
+            console.error("Profile Update Error:", error);
             Alert.alert('Error', error.message);
         } finally {
             setLoading(false);
@@ -77,10 +106,13 @@ const ProfileScreen = () => {
         const result = await launchImageLibrary({
             mediaType: 'photo',
             quality: 0.5,
+            includeBase64: true,
         });
 
         if (result.assets && result.assets.length > 0) {
-            setPhotoURL(result.assets[0].uri || null);
+            const asset = result.assets[0];
+            setPhotoURL(asset.uri || null);
+            setNewPhotoBase64(asset.base64 || null);
         }
     };
 
@@ -114,6 +146,16 @@ const ProfileScreen = () => {
                             style={styles.input}
                         />
 
+                        <TextInput
+                            label="Bio"
+                            value={bio}
+                            onChangeText={setBio}
+                            mode="outlined"
+                            multiline
+                            numberOfLines={3}
+                            style={styles.input}
+                        />
+
                         <View style={styles.modalButtons}>
                             <Button onPress={() => setModalVisible(false)} style={styles.modalButton}>Cancel</Button>
                             <Button mode="contained" onPress={handleUpdate} loading={loading} style={styles.modalButton}>Save</Button>
@@ -125,13 +167,21 @@ const ProfileScreen = () => {
             {/* Profile Card */}
             <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]}>
                 <View style={styles.avatarContainer}>
-                    <Image
-                        source={{ uri: user?.photoURL || 'https://i.pravatar.cc/300' }}
-                        style={[styles.avatar, { borderColor: theme.colors.surfaceVariant }]}
-                    />
+                    {photoURL ? (
+                        <Image
+                            source={{ uri: photoURL }}
+                            style={[styles.avatar, { borderColor: theme.colors.surfaceVariant }]}
+                        />
+                    ) : (
+                        <Avatar.Icon size={responsiveWidth(25)} icon="account" />
+                    )}
                 </View>
-                <Text variant="headlineMedium" style={[styles.name, { color: theme.colors.onSurface }]}>{user?.displayName || 'Shayan'}</Text>
-                <Text variant="bodyLarge" style={[styles.email, { color: theme.colors.onSurfaceVariant }]}>{user?.email || 'shayan@example.com'}</Text>
+                <Text variant="headlineMedium" style={[styles.name, { color: theme.colors.onSurface }]}>{profile?.displayName || user?.displayName || 'Social User'}</Text>
+                <Text variant="bodyLarge" style={[styles.email, { color: theme.colors.onSurfaceVariant }]}>{user?.email}</Text>
+
+                {bio ? (
+                    <Text variant="bodyMedium" style={[styles.bio, { color: theme.colors.onSurfaceVariant }]}>{bio}</Text>
+                ) : null}
 
                 <TouchableOpacity style={[styles.editButton, { backgroundColor: theme.colors.primary }]} onPress={() => setModalVisible(true)}>
                     <Text style={styles.editButtonText}>Edit Profile</Text>
@@ -189,8 +239,14 @@ const styles = StyleSheet.create({
         fontSize: responsiveFontSize(3),
     },
     email: {
-        marginBottom: responsiveHeight(3),
+        marginBottom: responsiveHeight(1),
         fontSize: responsiveFontSize(1.8),
+    },
+    bio: {
+        marginBottom: responsiveHeight(2.5),
+        fontSize: responsiveFontSize(1.7),
+        textAlign: 'center',
+        paddingHorizontal: responsiveWidth(5),
     },
     editButton: {
         paddingVertical: responsiveHeight(1.5),

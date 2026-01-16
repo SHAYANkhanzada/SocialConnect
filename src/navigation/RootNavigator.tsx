@@ -6,18 +6,32 @@ import { auth } from '../services/firebase';
 import AuthNavigator from './AuthNavigator';
 import AppNavigator from './AppNavigator';
 import { View, ActivityIndicator } from 'react-native';
+import { NotificationService } from '../services/NotificationService';
 
 const RootNavigator = () => {
     const [user, setUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
+        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
             setUser(user);
             setLoading(false);
+
+            if (user) {
+                // Handle Notifications if logged in
+                const hasPermission = await NotificationService.requestUserPermission();
+                if (hasPermission) {
+                    await NotificationService.getFcmToken(user.uid);
+                }
+            }
         });
 
-        return unsubscribe;
+        const unsubscribeNotifications = NotificationService.setupListeners();
+
+        return () => {
+            unsubscribeAuth();
+            unsubscribeNotifications();
+        };
     }, []);
 
     if (loading) {
