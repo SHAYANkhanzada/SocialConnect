@@ -1,97 +1,66 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# SocialConnect - Real-time Social Media App
 
-# Getting Started
+SocialConnect is a powerful, real-time social networking application built using **React Native** and **Firebase**. It features a robust post-sharing system, user profiles with real-time updates, and a unique storage workaround for the Firebase free tier.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+## 🚀 Key Features
 
-## Step 1: Start Metro
+- **Dynamic Feed**: Real-time post updates using Firestore subscriptions.
+- **Smart Image Storage**: Custom Base64 compression engine to bypass Firebase Storage paid tier requirements.
+- **User Discovery**: Case-insensitive search to find friends and community members.
+- **Social Engagement**: Like posts with animations and real-time counter updates.
+- **Profile Management**: Customizable bio and avatars stored directly in Cloud Firestore.
+- **Friendship System**: Integrated friend request (sent/received/accepted) and follow system.
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+## 🛠 Tech Stack
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+- **Frontend**: [React Native](https://reactnative.dev/) with [TypeScript](https://www.typescriptlang.org/)
+- **UI Design**: [React Native Paper](https://reactnativepaper.com/) (Material Design)
+- **Backend/Database**: [Firebase Firestore](https://firebase.google.com/docs/firestore)
+- **Authentication**: [Firebase Auth](https://firebase.google.com/docs/auth)
+- **Navigation**: [React Navigation](https://reactnavigation.org/)
 
-```sh
-# Using npm
-npm start
+## 📦 Installation & Setup
 
-# OR using Yarn
-yarn start
+1. **Clone the project**
+   ```bash
+   git clone https://github.com/SHAYANkhanzada/SocialConnect.git
+   cd SocialConnect
+   ```
+
+2. **Install Dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Firebase Configuration**
+   - Create a project on [Firebase Console](https://console.firebase.google.com/).
+   - Enable **Firestore Database** and **Authentication** (Email/Password).
+   - Add your `google-services.json` (Android) or `GoogleService-Info.plist` (iOS) to the respective native folders.
+   - Update `src/services/firebase.ts` with your web configuration keys.
+
+4. **Run the App**
+   ```bash
+   # For Android
+   npm run android
+
+   # For iOS
+   npm run ios
+   ```
+
+## 🔐 Security Rules
+
+To ensure the app works correctly, apply the following rules in your Firestore Console:
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
 ```
 
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
-```
-
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
-```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
-```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+---
+Developed by **Shayan Akram** 🚀
