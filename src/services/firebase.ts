@@ -3,14 +3,24 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
+import {
+  FIREBASE_API_KEY,
+  FIREBASE_AUTH_DOMAIN,
+  FIREBASE_PROJECT_ID,
+  FIREBASE_STORAGE_BUCKET,
+  FIREBASE_MESSAGING_SENDER_ID,
+  FIREBASE_APP_ID,
+  FIREBASE_MEASUREMENT_ID
+} from '@env';
+
 const firebaseConfig = {
-  apiKey: "AIzaSyCRbj0uB0EpXlfzuQoC0h5oz6XPYfQClaQ",
-  authDomain: "socialconnect-76631.firebaseapp.com",
-  projectId: "socialconnect-76631",
-  storageBucket: "socialconnect-76631.firebasestorage.app",
-  messagingSenderId: "273488932188",
-  appId: "1:273488932188:web:fed8828a7a7644aa3a6599",
-  measurementId: "G-0K4WTGPB2F"
+  apiKey: FIREBASE_API_KEY,
+  authDomain: FIREBASE_AUTH_DOMAIN,
+  projectId: FIREBASE_PROJECT_ID,
+  storageBucket: FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: FIREBASE_MESSAGING_SENDER_ID,
+  appId: FIREBASE_APP_ID,
+  measurementId: FIREBASE_MEASUREMENT_ID
 };
 
 const app = initializeApp(firebaseConfig);
